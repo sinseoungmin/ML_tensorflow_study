@@ -3,27 +3,8 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import  LabelBinarizer
 
-df_train = pd.read_csv('./MNIST_data_csv/mnist_train.csv', header=None)
-df_test = pd.read_csv('./MNIST_data_csv/mnist_test.csv', header=None)
-
-train_list = list(df_train)
-test_list = list(df_test)
-
-train_images = df_train.iloc[:,1:].values
-test_images = df_test.iloc[:,1:].values
-
-lb1 = LabelBinarizer()
-lb2 = LabelBinarizer()
-train_labels = lb1.fit_transform(df_train.iloc[:,0].values)
-test_labels = lb2.fit_transform(df_test.iloc[:,0].values)
-
-mnist = {'train':{
-        'images':train_images,
-        'labels':train_labels},
-        'test':{
-        'images':test_images,
-        'labels':test_labels}
-         }
+from tensorflow.examples.tutorials.mnist import input_data
+mnist = input_data.read_data_sets('MNIST_data/', one_hot=True)
 
 
 def xavier_init(n_inputs, n_outputs, uniform=True):
@@ -33,6 +14,7 @@ def xavier_init(n_inputs, n_outputs, uniform=True):
     else:
         stddev = tf.sqrt(3.0/ (n_inputs+n_outputs))
         return tf.truncated_normal_initializer(stddev=stddev)
+
 
 # parameter
 learning_rate = 0.001
@@ -44,6 +26,10 @@ display_step = 1
 x = tf.placeholder('float', [None, 784])
 y = tf.placeholder('float', [None, 10])
 
+# 기본 초기값
+# w1 = tf.Variable(tf.random_normal([784,256]))
+# w2 = tf.Variable(tf.random_normal([256,256]))
+# w3 = tf.Variable(tf.random_normal([256,10]))
 
 # Xavier initialization
 w1 = tf.get_variable('w1', shape=[784, 256], initializer=xavier_init(784, 256))
@@ -57,6 +43,10 @@ b3 = tf.Variable(tf.random_normal([128]))
 b4 = tf.Variable(tf.random_normal([64]))
 b5 = tf.Variable(tf.random_normal([10]))
 
+# 기본 모델
+# l1 = tf.nn.relu(tf.matmul(x,w1)+b1)
+# l2 = tf.nn.relu(tf.matmul(l1,w2)+b2) # hidden layer with relu activation
+# hypothesis = tf.matmul(l2,w3)+b3 # no need to use softmax here
 
 # more deep & Dropout
 dropout_rate = tf.placeholder('float')
@@ -80,17 +70,26 @@ init = tf.global_variables_initializer()
 
 # launch the graph
 with tf.Session() as sess:
-        sess.run(init)
-        feed_train = {x: mnist['train']['images'], y: mnist['train']['labels'], dropout_rate: 0.7}
-        feed_test = {x: mnist['test']['images'], y: mnist['test']['labels'], dropout_rate: 1}
+    sess.run(init)
 
-        # training cycle
-        for step in range(501):
-                sess.run(optimizer, feed_dict=feed_train)
+    # training cycle <- mnist database 있을 때,
+    for epoch in range(training_epochs):
+        avg_cost = 0.
+        total_batch = int(mnist.train.num_examples / batch_size)
 
-                if step % 20 == 0:
-                        print(step, sess.run(cost, feed_dict=feed_train))
-                if step % 100 == 0:
-                        correc_prediction = tf.equal(tf.arg_max(hypothesis, 1), tf.argmax(y, 1))
-                        accuracy = tf.reduce_mean(tf.cast(correc_prediction, tf.float32))
-                        print(sess.run(accuracy, feed_dict=feed_test))
+        # loop over all batches
+        for i in range(total_batch):
+            batch_xs, batch_ys = mnist.train.next_batch(batch_size)
+            # fit training using batch data
+            sess.run(optimizer, feed_dict={x: batch_xs, y: batch_ys, dropout_rate: 0.7})
+            # compute average loss
+            avg_cost += sess.run(cost, feed_dict={x: batch_xs, y: batch_ys, dropout_rate: 0.7}) / total_batch
+
+        if epoch % display_step == 0:
+            print('Epoch:', '%04d' % (epoch + 1), 'cost=', '{:.9f}'.format(avg_cost))
+            correc_prediction = tf.equal(tf.arg_max(hypothesis, 1), tf.argmax(y, 1))
+            accuracy = tf.reduce_mean(tf.cast(correc_prediction, tf.float32))
+            print('Accuracy: ',
+                  sess.run(accuracy, feed_dict={x: mnist.test.images, y: mnist.test.labels, dropout_rate: 1.0}))
+
+    print('Optimization Finished!')
